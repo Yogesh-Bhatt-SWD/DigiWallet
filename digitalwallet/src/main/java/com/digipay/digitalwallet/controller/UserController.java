@@ -1,9 +1,6 @@
 package com.digipay.digitalwallet.controller;
 
-import com.digipay.digitalwallet.dto.CheckBalanceResponse;
-import com.digipay.digitalwallet.dto.CreateUserResponse;
-import com.digipay.digitalwallet.dto.UserDepositRequest;
-import com.digipay.digitalwallet.dto.UserDepositResponse;
+import com.digipay.digitalwallet.dto.*;
 import com.digipay.digitalwallet.entity.User;
 import com.digipay.digitalwallet.service.UserService;
 import org.springframework.http.HttpStatus;
@@ -41,5 +38,11 @@ public class UserController {
                 HttpStatus.OK
         ).body(response);
 
+    }
+
+    @PostMapping("/{userId}/account/sent-Money")
+    public ResponseEntity<UserTransferMoneyResponse> transferMoney(@RequestBody UserTransferMoneyRequest transferMoneyRequest,
+                                                                   @PathVariable Long userId) {
+        UserTransferMoneyResponse response = userService.transferMoney(transferMoneyRequest,userId);
     }
 }

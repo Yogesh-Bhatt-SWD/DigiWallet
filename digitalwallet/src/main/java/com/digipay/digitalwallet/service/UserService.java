@@ -1,14 +1,11 @@
 package com.digipay.digitalwallet.service;
 
-import com.digipay.digitalwallet.dto.CheckBalanceResponse;
-import com.digipay.digitalwallet.dto.CreateUserResponse;
-import com.digipay.digitalwallet.dto.UserDepositRequest;
-import com.digipay.digitalwallet.dto.UserDepositResponse;
+import com.digipay.digitalwallet.dto.*;
 import com.digipay.digitalwallet.entity.Account;
 import com.digipay.digitalwallet.entity.User;
+import com.digipay.digitalwallet.enums.AccountStatus;
 import com.digipay.digitalwallet.enums.UserStatus;
-import com.digipay.digitalwallet.globalexception.AccountNotFoundException;
-import com.digipay.digitalwallet.globalexception.UserNotFoundException;
+import com.digipay.digitalwallet.globalexception.*;
 import com.digipay.digitalwallet.repository.AccountRepository;
 import com.digipay.digitalwallet.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -49,6 +46,9 @@ public class UserService {
         if(account==null) {
             throw new AccountNotFoundException("Account Not Found");
         }
+        if(account.getStatus()== AccountStatus.BLOCKED||account.getStatus()==AccountStatus.CLOSED) {
+            throw new InvalidAccountStatusException("Can't do payment. Account is blocked or closed");
+        }
         BigDecimal amount = deposit.getAmount();
         if(amount==null) {
             throw new IllegalArgumentException("Amount cant be null");
@@ -81,4 +81,33 @@ public class UserService {
         response.setDepositedAt(LocalDateTime.now());
         return response;
     }
-}
+
+    public UserTransferMoneyResponse transferMoney(UserTransferMoneyRequest transferMoneyRequest, Long userId) {
+        User sender = userRepository.findById(transferMoneyRequest.getFromUserId()).orElseThrow(
+                () -> new UserNotFoundException("User with this id " + transferMoneyRequest.getFromUserId() + " not found ")
+        );
+        User receiver = userRepository.findById(transferMoneyRequest.getToUserId()).orElseThrow(
+                () -> new UserNotFoundException("User with this id " + transferMoneyRequest.getToUserId() + " not found ")
+        );
+
+        Account senderAccount = sender.getAccount();
+        Account receiverAccount = receiver.getAccount();
+
+        if (senderAccount == null || receiverAccount == null) {
+            throw new AccountNotFoundException("Account Not Found ");
+        }
+        BigDecimal senderBalance = senderAccount.getBalance();
+        BigDecimal sendingAmount = transferMoneyRequest.getAmount();
+
+        if (sendingAmount.compareTo(senderBalance) > 0) {
+            throw new InsufficientBankBalanceException(
+                    "Insufficient balance"
+            );
+        }
+        if (sendingAmount.compareTo(new BigDecimal("25000")) > 0) {
+            throw new OneTimeTransactionLimitReachedException("Limit reached: one-time transaction can't be more than 25000 rupees");
+        }
+
+
+        return null;
+    }
