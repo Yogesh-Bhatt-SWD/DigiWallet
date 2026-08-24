@@ -1,11 +1,14 @@
 package com.digipay.digitalwallet.controller;
 
 import com.digipay.digitalwallet.dto.*;
+import com.digipay.digitalwallet.entity.TransactionHistory;
 import com.digipay.digitalwallet.entity.User;
 import com.digipay.digitalwallet.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
@@ -40,9 +43,15 @@ public class UserController {
 
     }
 
-    @PostMapping("/{userId}/account/sent-Money")
-    public ResponseEntity<UserTransferMoneyResponse> transferMoney(@RequestBody UserTransferMoneyRequest transferMoneyRequest,
-                                                                   @PathVariable Long userId) {
-        UserTransferMoneyResponse response = userService.transferMoney(transferMoneyRequest,userId);
+    @PostMapping("/account/sent-money")
+    public ResponseEntity<UserTransferMoneyResponse> transferMoney(@RequestBody UserTransferMoneyRequest transferMoneyRequest) {
+        UserTransferMoneyResponse response = userService.transferMoney(transferMoneyRequest);
+        return ResponseEntity.status(
+                HttpStatus.OK
+        ).body(response);
+    }
+    @GetMapping("/{userId}")
+    public ResponseEntity<List<TransactionHistory>> transactionHistory(@PathVariable Long userId) {
+        List<TransactionHistory> list = userService.getTransactionHistory(userId);
     }
 }

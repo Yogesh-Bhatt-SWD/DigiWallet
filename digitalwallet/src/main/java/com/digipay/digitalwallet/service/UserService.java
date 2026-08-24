@@ -2,6 +2,7 @@ package com.digipay.digitalwallet.service;
 
 import com.digipay.digitalwallet.dto.*;
 import com.digipay.digitalwallet.entity.Account;
+import com.digipay.digitalwallet.entity.TransactionHistory;
 import com.digipay.digitalwallet.entity.User;
 import com.digipay.digitalwallet.enums.AccountStatus;
 import com.digipay.digitalwallet.enums.UserStatus;
@@ -12,27 +13,31 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class UserService {
 
     private final AccountRepository accountRepository;
     private UserRepository userRepository;
+    private TransactionHistoryService transactionHistoryService;
 
-    public UserService(UserRepository userRepository, AccountRepository accountRepository) {
-        this.userRepository=userRepository;
+    public UserService(UserRepository userRepository, AccountRepository accountRepository,TransactionHistoryService transactionHistoryService) {
+        this.userRepository = userRepository;
         this.accountRepository = accountRepository;
+        this.transactionHistoryService=transactionHistoryService;
     }
-    public CreateUserResponse createUser(User user){
+
+    public CreateUserResponse createUser(User user) {
         user.setStatus(UserStatus.ACTIVE);
-        User res =  userRepository.save(user);
+        User res = userRepository.save(user);
         return mapToDto(res);
     }
 
     public CheckBalanceResponse checkBalance(Long id) {
-        User user = userRepository.findById(id).orElseThrow(()->new UserNotFoundException("user with this id "+id+" not found"));
+        User user = userRepository.findById(id).orElseThrow(() -> new UserNotFoundException("user with this id " + id + " not found"));
         Account account = user.getAccount();
-        if(account==null) {
+        if (account == null) {
             throw new AccountNotFoundException("Account Not Found");
         }
         BigDecimal balance = account.getBalance();
@@ -40,17 +45,18 @@ public class UserService {
         response.setBalance(balance);
         return response;
     }
-    public UserDepositResponse depositAmount(UserDepositRequest deposit,Long id) {
-        User user = userRepository.findById(id).orElseThrow(()->new UserNotFoundException("user with this id "+id+" not found"));
+
+    public UserDepositResponse depositAmount(UserDepositRequest deposit, Long id) {
+        User user = userRepository.findById(id).orElseThrow(() -> new UserNotFoundException("user with this id " + id + " not found"));
         Account account = user.getAccount();
-        if(account==null) {
+        if (account == null) {
             throw new AccountNotFoundException("Account Not Found");
         }
-        if(account.getStatus()== AccountStatus.BLOCKED||account.getStatus()==AccountStatus.CLOSED) {
+        if (account.getStatus() == AccountStatus.BLOCKED || account.getStatus() == AccountStatus.CLOSED) {
             throw new InvalidAccountStatusException("Can't do payment. Account is blocked or closed");
         }
         BigDecimal amount = deposit.getAmount();
-        if(amount==null) {
+        if (amount == null) {
             throw new IllegalArgumentException("Amount cant be null");
         }
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -59,7 +65,7 @@ public class UserService {
         BigDecimal newBalance = account.getBalance().add(amount);
         account.setBalance(newBalance);
         Account res = accountRepository.save(account);
-        return mapToDto(res,amount);
+        return mapToDto(res, amount);
     }
 
     private CreateUserResponse mapToDto(User res) {
@@ -74,7 +80,8 @@ public class UserService {
 
         return resp;
     }
-    private UserDepositResponse mapToDto(Account account,BigDecimal amount) {
+
+    private UserDepositResponse mapToDto(Account account, BigDecimal amount) {
         UserDepositResponse response = new UserDepositResponse();
         response.setAccountBalance(account.getBalance());
         response.setDepositedAmount(amount);
@@ -82,7 +89,7 @@ public class UserService {
         return response;
     }
 
-    public UserTransferMoneyResponse transferMoney(UserTransferMoneyRequest transferMoneyRequest, Long userId) {
+    public UserTransferMoneyResponse transferMoney(UserTransferMoneyRequest transferMoneyRequest) {
         User sender = userRepository.findById(transferMoneyRequest.getFromUserId()).orElseThrow(
                 () -> new UserNotFoundException("User with this id " + transferMoneyRequest.getFromUserId() + " not found ")
         );
@@ -96,18 +103,51 @@ public class UserService {
         if (senderAccount == null || receiverAccount == null) {
             throw new AccountNotFoundException("Account Not Found ");
         }
-        BigDecimal senderBalance = senderAccount.getBalance();
-        BigDecimal sendingAmount = transferMoneyRequest.getAmount();
 
-        if (sendingAmount.compareTo(senderBalance) > 0) {
-            throw new InsufficientBankBalanceException(
-                    "Insufficient balance"
-            );
-        }
-        if (sendingAmount.compareTo(new BigDecimal("25000")) > 0) {
-            throw new OneTimeTransactionLimitReachedException("Limit reached: one-time transaction can't be more than 25000 rupees");
-        }
+            BigDecimal senderBalance = senderAccount.getBalance();
+            BigDecimal sendingAmount = transferMoneyRequest.getAmount();
 
-
-        return null;
+            if (sendingAmount.compareTo(senderBalance) > 0) {
+                throw new InsufficientBankBalanceException(
+                        "Insufficient balance"
+                );
+            }
+            if (sendingAmount.compareTo(new BigDecimal("25000")) > 0) {
+                throw new OneTimeTransactionLimitReachedException("Limit reached: one-time transaction can't be more than 25000 rupees");
+            }
+        TransactionHistory transaction;
+            if(!(senderAccount.getStatus()==AccountStatus.ACTIVE&&receiverAccount.getStatus()==AccountStatus.ACTIVE)) {
+                throw new InvalidAccountStatusException("Account Status is Closed Or Blocked");
+            }
+                if (sendingAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                    throw new IllegalArgumentException("Account greater than zero");
+                }
+                receiverAccount.setBalance(receiverAccount.getBalance().add(sendingAmount));
+                senderAccount.setBalance(senderAccount.getBalance().subtract(sendingAmount));
+                senderAccount=accountRepository.save(senderAccount);
+                receiverAccount=accountRepository.save(receiverAccount);
+                 transaction = transactionHistoryService.addTransaction(senderAccount,receiverAccount,sendingAmount);
+            return mapToDto(senderAccount,receiverAccount,transaction);
     }
+    private UserTransferMoneyResponse mapToDto(Account senderAccount,Account receiverAccount,TransactionHistory transaction) {
+        UserTransferMoneyResponse response = new UserTransferMoneyResponse();
+        response.setTransactionId(transaction.getId());
+        response.setSenderName(senderAccount.getUser().getName());
+        response.setReceiverName(receiverAccount.getUser().getName());
+        response.setAmount(transaction.getAmount());
+        response.setTransferredAt(transaction.getTransferredAt());
+        response.setRemainingBalance(senderAccount.getBalance());
+        return response;
+
+    }
+    public List<TransactionHistory> getTransactionHistory(Long userId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException("user with this id " + userId + " not found"));
+        Account account = user.getAccount();
+        if (account == null) {
+            throw new AccountNotFoundException("Account Not Found");
+        }
+        List<TransactionHistory> list = account.getSentTransaction();
+        return list;
+    }
+}
+
