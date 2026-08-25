@@ -140,14 +140,37 @@ public class UserService {
         return response;
 
     }
-    public List<TransactionHistory> getTransactionHistory(Long userId) {
-        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException("user with this id " + userId + " not found"));
+    public TransactionHistoryResponse getTransactionHistory(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new UserNotFoundException(
+                                "user with this id " + userId + " not found"
+                        ));
+
         Account account = user.getAccount();
+
         if (account == null) {
             throw new AccountNotFoundException("Account Not Found");
         }
+
         List<TransactionHistory> list = account.getSentTransaction();
-        return list;
+
+        return mapToDto(user, account, list);
     }
-}
+
+    private TransactionHistoryResponse mapToDto(
+            User user,
+            Account account,
+            List<TransactionHistory> list) {
+
+        TransactionHistoryResponse response = new TransactionHistoryResponse();
+
+        response.setAccountId(account.getId());
+        response.setUserName(user.getName());
+        response.setTransaction(list);
+
+        return response;
+    }
+
+    }
 

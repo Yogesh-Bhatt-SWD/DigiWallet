@@ -50,8 +50,11 @@ public class UserController {
                 HttpStatus.OK
         ).body(response);
     }
-    @GetMapping("/{userId}")
-    public ResponseEntity<List<TransactionHistory>> transactionHistory(@PathVariable Long userId) {
-        List<TransactionHistory> list = userService.getTransactionHistory(userId);
+    @GetMapping("/{userId}/payment-history")
+    public ResponseEntity<TransactionHistoryResponse> transactionHistory(@PathVariable Long userId) {
+        TransactionHistoryResponse response = userService.getTransactionHistory(userId);
+        return ResponseEntity.status(
+                HttpStatus.CREATED
+        ).body(response);
     }
 }
